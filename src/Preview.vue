@@ -1,11 +1,16 @@
 <script setup lang="ts">
+type PreviewType = 'preview' | 'preview-no-code';
+
 const props = defineProps<{
   src: string;
+  type?: PreviewType;
 }>();
+
+const previewType = props.type || 'preview';
 </script>
 
 <template>
-  <div class="code-group-preview">
+  <div class="code-group-preview" :data-type="previewType">
     <iframe
       :src="decodeURIComponent(props.src)"
       class="code-group-preview-frame"
@@ -27,6 +32,12 @@ const props = defineProps<{
     height: 100%;
     border: none;
   }
+
+  &[data-type="preview-no-code"] {
+    border-radius: 8px;
+    border: 1px solid var(--vp-code-tab-divider);
+    margin-bottom: 16px;
+  }
 }
 
 .code-group-preview ~ .vp-code-group {
@@ -38,6 +49,10 @@ const props = defineProps<{
     border-radius: 8px 8px 0 0;
     margin-right: 0;
     margin-left: 0;
+
+    &[data-type="preview-no-code"] {
+      border-radius: 8px;
+    }
   }
 
   .code-group-preview ~ .vp-code-group {

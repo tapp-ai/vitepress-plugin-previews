@@ -3,13 +3,13 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { build, createServer } from "vite";
 
-// https://regex101.com/r/roeve3/4
+// https://regex101.com/r/roeve3/9
 const CODE_GROUP_REGEX =
-  /(?:^\s*?:::\scode-group\s+?preview(?:\(([^)]*)\))?\s*?)((?:^\s*```[^\s]+\s\[[^\]]+\]\s*?$.*?^\s*?```\s*?)+)(?:^\s*?:::\s*?$)/gms;
+  /(?:^\s*?::: code-group[^\S\r\n]+?preview((?:[^\S\r\n]+[a-zA-Z0-9._-]+(?:=[a-zA-Z0-9._-]+)?)+?)?\s*\n)((?:^\s*```[^\s]+[^\S\r\n]\[[^\]]+\]\s*?$.*?^\s*?```\s*?)+)(?:^\s*?:::\s*?$)/gms;
 
-// https://regex101.com/r/DwMkgE/1
+// https://regex101.com/r/DwMkgE/2
 const FILE_REGEX =
-  /(?:^\s*```[^\s]+\s\[([^\s\]]+)\]\s*$)\s*(?:(^.+?$))\s*(?:```)/gms;
+  /(?:^\s*```[^\s]+[^\S\r\n]\[([^\s\]]+)\]\s*$)\s*(?:(^.+?$))\s*(?:```)/gms;
 
 const getPluginDir = (root: string) => {
   const pluginDir = path.join(root, ".vitepress", ".previews");
@@ -76,6 +76,40 @@ const generatePreview = async (
   return previewId;
 };
 
+const parseAttributes = (attrString: string | undefined): Record<string, string | true> => {
+  const attrs: Record<string, string | true> = {};
+  if (!attrString) {
+    return attrs;
+  }
+
+  // https://regex101.com/r/jtvxto/1
+  // Regex for one attribute: name(=value)?
+  // Each attribute is preceded by one or more horizontal spaces.
+  // Attribute name: [a-zA-Z0-9._-]+
+  // Optional value part: =([a-zA-Z0-9._-]+)
+  const attrRegex = /[^\S\r\n]+([a-zA-Z0-9._-]+)(?:=([a-zA-Z0-9._-]+))?/g;
+
+  let match;
+  while ((match = attrRegex.exec(attrString)) !== null) {
+    const name = match[1];
+    if (name) {
+      const value = match[2];
+      if (value !== undefined) {
+        attrs[name] = value;
+      } else {
+        // Attribute is a flag, like 'no-code' or 'hidden'
+        attrs[name] = true;
+      }
+    }
+  }
+  return attrs;
+};
+
+enum PreviewType {
+  Default = 'preview',
+  NoCode = 'preview-no-code'
+}
+
 const transform = async (
   previews: Record<string, string[]>,
   id: string,
@@ -118,23 +152,33 @@ const transform = async (
 
   for (const match of matches) {
     try {
+      const attributesString = match[1]; // Group 1 is the attributes string
+      const codeGroup = match[2] as string; // Group 2 is the code blocks
+
+      const parsedAttrs = parseAttributes(attributesString);
+
+      const template = parsedAttrs.template && typeof parsedAttrs.template === 'string'
+        ? parsedAttrs.template
+        : options?.defaultTemplate;
+
       const previewId = await generatePreview(
         id,
         index,
-        match[2] as string,
+        codeGroup, // Use the new codeGroup variable
         root,
-        match[1]?.trim() || options?.defaultTemplate
+        template // Use the template from parsedAttrs
       );
 
       previews[id] = previews[id] || [];
       previews[id].push(previewId);
 
       const src = getSrc(previewId, options, server);
+      const type = parsedAttrs['no-code'] === true ? PreviewType.NoCode : PreviewType.Default;
 
-      content = content.replace(
-        match[0],
-        `\n<Preview src="${encodeURIComponent(src)}" />\n${match[0]}`
-      );
+      let replacement = `\n<Preview src="${encodeURIComponent(src)}" type="${type}" />\n`;
+      if (type !== PreviewType.NoCode) replacement += match[0];
+
+      content = content.replace(match[0], replacement);
 
       index++;
     } catch {
