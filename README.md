@@ -8,6 +8,9 @@ Perfect for previews referencing private packages or for component libraries bui
 
 - [Installation](#installation)
 - [Usage](#usage)
+  - [Basic Usage](#basic-usage)
+  - [No-Code Preview](#no-code-preview)
+  - [React Example](#react-example)
 - [Templates](#templates)
 - [Caveats](#caveats)
 
@@ -97,6 +100,8 @@ interface PreviewsPluginOptions {
 
 ## Usage
 
+### Basic Usage
+
 Add the `preview` flag to any code group.
 
 ````md
@@ -124,6 +129,82 @@ createRoot(document.getElementById("root") as HTMLElement).render(
     <script type="module" src="./main.tsx"></script>
   </body>
 </html>
+```
+
+:::
+````
+
+### No-Code Preview
+
+Add the `no-code` flag to hide the code group below the preview. This is useful when you want to show the result without the implementation details.
+
+The `no-code` flag can be used with or without templates:
+
+````md
+::: code-group preview no-code
+
+```tsx [App.tsx]
+export default function App() {
+  return <button>Click me</button>;
+}
+```
+
+:::
+````
+
+With a template, the `no-code` flag must come after the template name:
+
+````md
+::: code-group preview template=my-template no-code
+
+```tsx [src/App.tsx]
+export default function App() {
+  return <button>Click me</button>;
+}
+```
+
+:::
+````
+
+> [!NOTE]
+> When specifying a template (e.g., `template=my-template`) along with other flags like `no-code`, the order of attributes does not strictly matter, but the recommended syntax is `preview template=templateName no-code`.
+
+### React Example
+
+Here's a complete React example showing how to structure your files:
+
+````md
+::: code-group preview template=example-template no-code
+
+```tsx [src/App.tsx]
+import { useState } from 'react';
+import './App.css';
+
+export default function App() {
+  const [count, setCount] = useState(0);
+  
+  return (
+    <div className="app">
+      <h1>Count: {count}</h1>
+      <button onClick={() => setCount(count + 1)}>
+        Increment
+      </button>
+    </div>
+  );
+}
+```
+
+```css [src/App.css]
+.app {
+  padding: 2rem;
+  text-align: center;
+}
+
+button {
+  padding: 0.5rem 1rem;
+  font-size: 1rem;
+  margin-top: 1rem;
+}
 ```
 
 :::
@@ -157,7 +238,7 @@ export default withPreviews(
 Templates can be specified per code group and will overwrite the default template.
 
 ````md
-::: code-group preview(example-template)
+::: code-group preview template=example-template no-code
 
 ```tsx [src/App.tsx]
 export default function App() {

@@ -3,13 +3,16 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { build, createServer } from "vite";
 
-// https://regex101.com/r/roeve3/4
+// https://regex101.com/r/roeve3/9
 const CODE_GROUP_REGEX =
-  /(?:^\s*?:::\scode-group\s+?preview(?:\(([^)]*)\))?\s*?)((?:^\s*```[^\s]+\s\[[^\]]+\]\s*?$.*?^\s*?```\s*?)+)(?:^\s*?:::\s*?$)/gms;
+  /(?:^\s*?::: code-group[^\S\r\n]+?preview((?:[^\S\r\n]+[a-zA-Z0-9._-]+(?:=[a-zA-Z0-9._-]+)?)+?)?\s*\n)((?:^\s*```[^\s]+[^\S\r\n]\[[^\]]+\]\s*?$.*?^\s*?```\s*?)+)(?:^\s*?:::\s*?$)/gms;
 
-// https://regex101.com/r/DwMkgE/1
+// https://regex101.com/r/DwMkgE/2
 const FILE_REGEX =
-  /(?:^\s*```[^\s]+\s\[([^\s\]]+)\]\s*$)\s*(?:(^.+?$))\s*(?:```)/gms;
+  /(?:^\s*```[^\s]+[^\S\r\n]\[([^\s\]]+)\]\s*$)\s*(?:(^.+?$))\s*(?:```)/gms;
+
+// https://regex101.com/r/jtvxto/1
+const ATTRIBUTE_REGEX = /[^\S\r\n]+([a-zA-Z0-9._-]+)(?:=([a-zA-Z0-9._-]+))?/g;
 
 const getPluginDir = (root: string) => {
   const pluginDir = path.join(root, ".vitepress", ".previews");
@@ -76,6 +79,22 @@ const generatePreview = async (
   return previewId;
 };
 
+const parseAttributes = (attributes?: string) => {
+  const parsedAttributes: Record<string, string | true | undefined> = {};
+  if (!attributes) return parsedAttributes;
+
+  const matches = attributes.matchAll(ATTRIBUTE_REGEX);
+
+  for (const match of matches) {
+    const [_, attribute, value] = match;
+    if (!attribute) continue;
+
+    parsedAttributes[attribute] = typeof value === "undefined" ? true : value;
+  }
+
+  return parsedAttributes;
+};
+
 const transform = async (
   previews: Record<string, string[]>,
   id: string,
@@ -118,12 +137,29 @@ const transform = async (
 
   for (const match of matches) {
     try {
+      const [root, attributes, body] = match;
+
+      // Code groups must have a body
+      if (!body) continue;
+
+      const parsedAttributes = parseAttributes(attributes);
+
+      // Fall back to the default template
+      const template =
+        parsedAttributes.template &&
+        typeof parsedAttributes.template === "string"
+          ? parsedAttributes.template
+          : options?.defaultTemplate;
+
+      // Remove the code group during replacement
+      const replace = parsedAttributes.replace === true;
+
       const previewId = await generatePreview(
         id,
         index,
-        match[2] as string,
+        body as string,
         root,
-        match[1]?.trim() || options?.defaultTemplate
+        template
       );
 
       previews[id] = previews[id] || [];
@@ -131,10 +167,18 @@ const transform = async (
 
       const src = getSrc(previewId, options, server);
 
-      content = content.replace(
-        match[0],
-        `\n<Preview src="${encodeURIComponent(src)}" />\n${match[0]}`
-      );
+      let replacement = "\n<Preview";
+      replacement += ` src="${encodeURIComponent(src)}"`;
+
+      // Add attributes
+      if (!replace) replacement += " replace";
+
+      replacement += " />\n";
+
+      // Include the original
+      if (!replace) replacement += root;
+
+      content = content.replace(root, replacement);
 
       index++;
     } catch {
